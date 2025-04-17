@@ -18,7 +18,7 @@ namespace Esp32Client
 		public delegate void TouchDelegate(int padNum, bool isTouched);
 		public static event TouchDelegate touchEvent;
 
-
+		// SDA pin 25, SCL pin 26
 		private static readonly I2cDevice i2c = I2cDevice.Create(new(2, 0x27));
 		private static readonly LcdInterface lcdInterface = LcdInterface.CreateI2c(i2c, false);
 		public static readonly Lcd2004 lcd = new(lcdInterface)
@@ -38,6 +38,8 @@ namespace Esp32Client
 			for (int padNum = 0; padNum < 10; ++padNum)
 			{
 				var touchpad = touchpads[padNum] = new(padNum);
+
+				// Touchpad.ValueChanged has bug: e.Touched is opposite value
 				touchpad.ValueChanged += (s, e) => touchEvent?.Invoke(e.PadNumber, !e.Touched);
 				touchpad.GetCalibrationData();
 				touchpad.Threshold = (uint)(2 / 3f * touchpad.CalibrationData);
