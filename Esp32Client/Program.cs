@@ -9,53 +9,66 @@ namespace Esp32Client
 	{
 		public static void Main()
 		{
-			// Connect Wifi
 			Util.Init();
-			Util.lcd.Clear();
-			Util.lcd.Write("Connecting wifi...");
-			// Replace ssid and password yourself
+			var lcd = Util.lcd;
+			lcd.Clear();
+			lcd.Write("Connecting wifi...");
 			if (WifiNetworkHelper.ConnectDhcp("VIETTEL 2.4G", "12345678@"))
 			{
-				Util.lcd.Clear();
-				Util.lcd.Write("Wifi OK !");
+				lcd.Clear();
+				lcd.Write("Wifi OK !");
+			}
+			else
+			{
+				lcd.Clear();
+				lcd.Write("Wifi failed !");
+				throw new System.Exception();
 			}
 
-			var connection = new HubConnection("http://192.168.1.250/ChatHub");
+			var connection = new HubConnection("http://192.168.1.250/ChatHub", options: new() { Reconnect = true });
+			AsyncResult result = null;
+			connection.Closed += (sender, message) =>
+			{
+				result = null;
+				lcd.Clear();
+				lcd.Write("Connection Closed !");
+				connection.Start();
+			};
 
-			// Register Receive
+			connection.Reconnecting += (sender, message) =>
+			{
+				lcd.Clear();
+				lcd.Write("Reconnecting...");
+			};
+
+			connection.Reconnected += (sender, message) =>
+			{
+				lcd.Clear();
+				lcd.Write("Reconnected !");
+			};
+
 			connection.On("ReceiveMessage", new[] { typeof(string) }, (sender, args) =>
 			{
-				Util.lcd.Clear();
-				Util.lcd.Write($"Receive {args[0]}");
+				lcd.Clear();
+				lcd.Write($"Receive {args[0]}");
 			});
 
-			// Register Send
-			AsyncResult result = null;
-			Util.touchEvent += (padNum, isTouched) =>
+			Util.touchEvent += (padNum, touch) =>
 			{
-				if (!isTouched || (result != null && !result.Completed)) return;
+				if (!touch || connection.State != HubConnectionState.Connected
+				|| (result != null && !result.Completed)) return;
 
-				Util.lcd.Clear();
-				Util.lcd.Write($"Sending {padNum}");
+				lcd.Clear();
+				lcd.Write($"Sending {padNum}");
 				result = connection.InvokeCoreAsync("SendMessage", null, new[] { padNum.ToString() });
 			};
 
-			// Connect Server
-			Util.lcd.Clear();
-			Util.lcd.Write("Connecting Server...");
-			while (true)
-			{
-				switch (connection.State)
-				{
-					case HubConnectionState.Connected: goto CONNECTED;
-					case HubConnectionState.Disconnected: connection.Start(); break;
-					default: Thread.Sleep(3000); break;
-				}
-			}
-
-		CONNECTED:
-			Util.lcd.Clear();
-			Util.lcd.Write("Server OK !");
+			lcd.Clear();
+			lcd.Write("Connecting Server...");
+			connection.Start();
+			while (connection.State != HubConnectionState.Connected) Thread.Sleep(1000);
+			lcd.Clear();
+			lcd.Write("Connected Server !");
 			Thread.Sleep(Timeout.Infinite);
 		}
 	}
